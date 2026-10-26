@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AR/VR Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+body { background: #121212; color: white; min-height: 100vh; padding: 20px; }
+.container { max-width: 800px; margin: 0 auto; }
+h1 { text-align: center; margin: 20px 0; color: #00e5ff; text-shadow: 0 0 10px #00e5ff; }
+
+.tabs { display: flex; gap: 10px; justify-content: center; margin: 20px 0; }
+.tab { background: #1e1e1e; border: none; color: white; padding: 12px 24px;
+       border-radius: 8px; cursor: pointer; border: 2px solid #333; }
+.tab.active { background: #00e5ff; color: #000; border-color: #00e5ff; }
+
+.viewer { background: #000; height: 400px; border-radius: 12px; margin: 20px 0;
+          position: relative; overflow: hidden; border: 3px solid #333; }
+#vrScene { background: linear-gradient(#0f4c75, #1b262c); }
+#arScene { background: #1a1a2e; }
+.scene { width: 100%; height: 100%; position: relative; }
+
+.object { position: absolute; font-size: 40px; cursor: pointer; transition: 0.3s; }
+.ar-marker { position: absolute; font-size: 50px; cursor: pointer; transition: 0.3s;
+             animation: fadeIn 0.5s, float 3s ease-in-out infinite; }
+.floating { animation: float 3s ease-in-out infinite; }
+
+.scan-line { position: absolute; left: 10%; width: 80%; height: 3px; top: 50%;
+             background: linear-gradient(90deg, transparent, #00e5ff, transparent);
+             animation: scan 2s linear infinite; }
+
+.controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 20px 0; }
+.btn { background: #333; color: white; border: none; padding: 10px 20px; border-radius: 6px;
+       cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.btn:hover { background: #00e5ff; color: #000; }
+.status { text-align: center; margin-top: 20px; color: #aaa; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes scan { 0%, 100% { top: 20%; } 50% { top: 80%; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🕶️ AR / VR Viewer</h1>
+
+  <div class="tabs">
+    <button class="tab active" onclick="setMode('vr', this)">🎮 VR Mode</button>
+    <button class="tab" onclick="setMode('ar', this)">📱 AR Mode</button>
+  </div>
+
+  <div class="viewer">
+    <div id="vrScene" class="scene">
+      <div class="object floating" style="left:100px;top:100px;color:#00e5ff" onclick="spin(this)">🟪</div>
+      <div class="object floating" style="left:300px;top:150px;color:#ff4081" onclick="spin(this)">🔴</div>
+      <div class="object floating" style="left:200px;top:250px;color:#76ff03" onclick="spin(this)">🔷</div>
+    </div>
+    <div id="arScene" class="scene" style="display:none">
+      <div class="ar-scanner" style="width:100%;height:100%;position:relative">
+        <div class="scan-line"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" onclick="addObject('cube')">🧊 Add Cube</button>
+    <button class="btn" onclick="addObject('sphere')">🔵 Add Sphere</button>
+    <button class="btn" onclick="addObject('star')">⭐ Add Star</button>
+    <button class="btn" onclick="clearObjects()">🗑️ Clear</button>
+  </div>
+
+  <div class="status" id="status">VR Mode | Objects: 3</div>
+</div>
+
+<script>
+let mode = 'vr';
+let arDemoLoaded = false;
+
+const EMOJI = { cube: '🟪', sphere: '🔵', star: '⭐' };
+const COLOR = { cube: '#00e5ff', sphere: '#ff4081', star: '#76ff03' };
+
+const vrScene = document.getElementById('vrScene');
+const arScene = document.getElementById('arScene');
+const arScanner = document.querySelector('.ar-scanner');
+const statusEl = document.getElementById('status');
+
+function countObjects() {
+  const selector = mode === 'vr' ? '#vrScene .object' : '#arScene .ar-marker';
+  return document.querySelectorAll(selector).length;
+}
+
+function updateStatus() {
+  statusEl.textContent = `${mode.toUpperCase()} Mode | Objects: ${countObjects()}`;
+}
+
+function flash() {
+  document.body.style.boxShadow = 'inset 0 0 50px rgba(0,229,255,0.3)';
+  setTimeout(() => (document.body.style.boxShadow = ''), 300);
+}
+
+function spin(el) {
+  el.style.rotate = '360deg';
+  setTimeout(() => (el.style.rotate = ''), 500);
+}
+
+function setMode(m, btn) {
+  mode = m;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  vrScene.style.display = m === 'vr' ? 'block' : 'none';
+  arScene.style.display = m === 'ar' ? 'block' : 'none';
+  if (m === 'ar' && !arDemoLoaded) simulateAR();
+  updateStatus();
+}
+
+function addMarker(emoji, color, left, top) {
+  const m = document.createElement('div');
+  m.className = 'ar-marker';
+  m.textContent = emoji;
+  m.style.color = color;
+  m.style.left = `${left}%`;
+  m.style.top = `${top}%`;
+  m.onclick = () => {
+    m.style.scale = '1.5';
+    setTimeout(() => { m.remove(); updateStatus(); }, 300);
+  };
+  arScanner.appendChild(m);
+}
+
+function addObject(type) {
+  if (mode === 'vr') {
+    const o = document.createElement('div');
+    o.className = 'object floating';
+    o.textContent = EMOJI[type];
+    o.style.color = COLOR[type];
+    o.style.left = `${5 + Math.random() * 80}%`;
+    o.style.top = `${5 + Math.random() * 75}%`;
+    o.onclick = () => spin(o);
+    vrScene.appendChild(o);
+  } else {
+    addMarker(EMOJI[type], COLOR[type], 20 + Math.random() * 60, 20 + Math.random() * 60);
+  }
+  flash();
+  updateStatus();
+}
+
+function clearObjects() {
+  document.querySelectorAll('.object').forEach(o => o.remove());
+  document.querySelectorAll('.ar-marker').forEach(m => m.remove());
+  updateStatus();
+}
+
+function simulateAR() {
+  arDemoLoaded = true;
+  const demo = ['🎯', '🟪', '🔴'];
+  const colors = ['#ff0000', '#00ff00', '#0000ff'];
+  demo.forEach((e, i) => {
+    setTimeout(() => {
+      addMarker(e, colors[i], 30 + i * 20, 40 + i * 10);
+      updateStatus();
+    }, i * 500);
+  });
+}
+</script>
+</body>
+</html>
